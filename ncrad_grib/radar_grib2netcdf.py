@@ -187,8 +187,7 @@ def radar_grib2netcdf(name_grib, name_nc=""):
         print("Probabile file mancante.")
 
 
-if __name__ == "__main__":
-
+def main():
     args = get_args()
 
     inputfile = args.inputfile
@@ -198,3 +197,7 @@ if __name__ == "__main__":
         outputfile = None
 
     radar_grib2netcdf(inputfile, outputfile)
+
+
+if __name__ == "__main__":
+    main()
