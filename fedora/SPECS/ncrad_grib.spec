@@ -3,7 +3,7 @@
 
 Name:           ncrad_grib
 Version:        0.1
-Release:        2
+Release:        3
 Summary:        Convert radar files between GRIB and NetCDF formats
 
 License:        GPLv3
@@ -13,7 +13,6 @@ Source0:        https://github.com/arpa-simc/%{name}/archive/v%{version}-%{relea
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
-BuildRequires:  python3-wheel
 Requires:       python3
 Requires:       python3-eccodes
 Requires:       python3-netcdf4
@@ -26,18 +25,21 @@ Convert radar files between GRIB and NetCDF formats
 %setup -q -n %{srcarchivename}
 
 %build
-%pyproject_wheel
+%py3_build
 
 %install
-%pyproject_install
+%py3_install
 
 %files
 %{python3_sitelib}/%{name}
-%{python3_sitelib}/%{name}*.dist-info
+%{python3_sitelib}/%{name}*.egg-info
 %{_bindir}/radar_grib2netcdf
 %{_bindir}/radar_netcdf2grib
 %license LICENSE
 
 %changelog
+* Thu Jul 21 2022 Emanuele Di Giacomo <edigiacomo@arpae.it> - 0.1-3
+- Fixed macro
+
 * Thu Jul 21 2022 Emanuele Di Giacomo <edigiacomo@arpae.it> - 0.1-2
 - First release
