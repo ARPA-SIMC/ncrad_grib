@@ -14,6 +14,7 @@ setup(
     name="ncrad_grib",
     version=get_version('ncrad_grib'),
     install_requires=[
+        "numpy", "netCDF4", "eccodes",
     ],
     packages=["ncrad_grib"],
     entry_points={
