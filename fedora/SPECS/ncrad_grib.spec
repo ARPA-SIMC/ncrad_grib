@@ -3,7 +3,7 @@
 
 Name:           ncrad_grib
 Version:        0.1
-Release:        1%{?dist}
+Release:        2
 Summary:        Convert radar files between GRIB and NetCDF formats
 
 License:        GPLv3
@@ -39,5 +39,5 @@ Convert radar files between GRIB and NetCDF formats
 %license LICENSE
 
 %changelog
-* Thu Jul 21 2022 Emanuele Di Giacomo <edigiacomo@arpae.it>
+* Thu Jul 21 2022 Emanuele Di Giacomo <edigiacomo@arpae.it> - 0.1-2
 - First release
