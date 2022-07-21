@@ -12,6 +12,9 @@ Source0:        https://github.com/arpa-simc/%{name}/archive/v%{version}-%{relea
 
 BuildRequires:  python3
 Requires:       python3
+Requires:       python3-eccodes
+Requires:       python3-netcdf4
+Requires:       python3-numpy
 
 %description
 Convert radar files between GRIB and NetCDF formats
