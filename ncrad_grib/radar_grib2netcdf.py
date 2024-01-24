@@ -76,6 +76,7 @@ def radar_grib2netcdf(name_grib, name_nc=""):
             ),
             "%Y%m%d%H%M",
         )
+        unit_cum = codes_get(gid, "indicatorOfUnitOfTimeRange")
 
         if name_nc is None or name_nc == "":
             name_nc = ".".join(name_grib.split("/")[-1].split(".")[:-1]) + ".nc"
@@ -111,28 +112,29 @@ def radar_grib2netcdf(name_grib, name_nc=""):
             np.array(np.arange(a, b, (b - a) / (codes_get(gid, "Nj") - 1))), b
         )
 
-        # Questa è la dicitura di time non convenzionale,
-        # da aggiungere anche quella convenzionale
+        # Nella conversione da griba netcdf usiamo la
+        # definizione di "time" convenzionale
         v = ncid.createVariable("time", "f4", ("time",))
         v.long_name = "time"
-        v.units = date_end_cum.strftime("hour before %Y-%m-%d %H:%M:0")
-        v[:] = np.array([0])
-
-        v = ncid.createVariable("idl", "S1")
-        v.projection_name = "lat-lon"
-        v.projection_index = "0s"
-        v.grid_mapping_name = "idl-lat-lon"
-        v[:] = ""
+        if unit_cum == 1:
+            v.units = "hours since 1970-01-01 00:00:0"
+        elif unit_cum == 0:
+            v.units = "minutes since 1970-01-01 00:00:0"
+        v.calendar = "gregorian"
+        v[:] = np.array([netCDF4.date2num(date_end_cum, units=v.units,
+                                          calendar = "gregorian")])
 
         v = ncid.createVariable("geo_dim", "f4", ("geo_dim",))
-        v.long_name = "Geo limits [yLL,xLL,yUR,xUR]"
+        v.long_name = "Geo limits [xLL, xUR, yLL, yUR]"
         v.units = "degrees"
+        # La scrittura dei limiti è convenzionale rispetto alla versione
+        # CF-1.8 (valori crescenti)
         v[:] = np.array(
             [
-                codes_get(gid, "latitudeOfLastGridPointInDegrees"),
                 codes_get(gid, "longitudeOfFirstGridPointInDegrees"),
-                codes_get(gid, "latitudeOfFirstGridPointInDegrees"),
                 codes_get(gid, "longitudeOfLastGridPointInDegrees"),
+                codes_get(gid, "latitudeOfLastGridPointInDegrees"),
+                codes_get(gid, "latitudeOfFirstGridPointInDegrees"),
             ]
         )
 
@@ -151,7 +153,7 @@ def radar_grib2netcdf(name_grib, name_nc=""):
             ),
         )
         v.long_name = "Radar Precipitation amount"
-        v.units = "mm"
+        v.units = "kg m-2"
         v.standard_name = "precipitation_amount"
         v.valid_min = 0.0
         v.valid_max = 10000.0
@@ -168,14 +170,13 @@ def radar_grib2netcdf(name_grib, name_nc=""):
         v[:] = np.array([np.flip(np.reshape(data, (-1, codes_get(gid, "Ni"))), 0)])
 
         # ATTIBUTI GLOBALI
-        ncid.Conventions = "CF-1.4"
+        ncid.Conventions = "CF-1.8"
         ncid.history = "Created by radar_grib2netcdf"
-        ncid.institute = "ARPA ER - SIMC "
+        ncid.institute = "Arpae Emilia-Romagna - SIMC"
         ncid.title = "Radar product"
-        ncid.reference = "palberoni@arpa.emr.it"
+        ncid.reference = "palberoni@arpae.it"
         ncid.comment = "none"
         ncid.MapType = "SRT"
-        ncid.RADARS_NAME = " spc gat"
 
         ncid.close()
 

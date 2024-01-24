@@ -84,57 +84,88 @@ def radar_netcdf2grib(name_nc, fileout=None):
         In questo modo la data è nella sottostringa 3 e l'ora
         nella sottostringa 4.
         """
+        try:
+            # Caso non CF-compliant
+            time_to_read = time.split(" ")
 
-        # Controllo che l'unità di cumulazione non siano i minuti
-        if time[0:7] == "minutes":
-            raise Exception("Le cumulate in minuti non sono ancora gestite, esco")
-        elif time[0:4] == "hour" or time[0:5] == "hours":
-            dum = time.split(" ")
-            cum_end = datetime.strptime(
-                "{} {}".format(dum[-2], dum[-1]), "%Y-%m-%d %H:%M:%S"
-            )
+            # Gestisco il caso in cui la cumulata sia "before" la data di validità.
+            # In questo caso la variabile time sarà sempre zero, mentre la data di
+            # validità sarà scritta nell'attributo "units".
+            if "since" not in time_to_read:
 
+                # se le units di time non sono CF-compliant, le correggo e
+                # estraggo data_validita come datetime da num2date usando units ricorrette
+                time_to_read[1] = "since"
+                units_new = " ".join(time_to_read)
+                cum_end = netCDF4.num2date(ncid.variables["time"][:], units_new, only_use_cftime_datetimes=False)[0]
+
+            # Caso CF-compliant
+            else:
+                
+                cum_end = netCDF4.num2date(ncid.variables["time"][:], time, only_use_cftime_datetimes=False)[0]
+
+        except Exception: 
+            print("Lettura time fallita")
+        
         # Estraggo le variabili necessarie al grib
         for k in ncid.variables.keys():
             if k == "cum_pr_mm":  # Estraggo gli attributi del campo di pioggia
                 varid_pr = ncid.variables["cum_pr_mm"]
-                cum_pr_mm = [varid_pr[:]][0]
+                
                 pr_units = varid_pr.units
-                acc_t = varid_pr.accum_time_h
-
                 # Verifico che l'unità di misura sia 'mm':
-                if pr_units.strip() != "mm":
+                if pr_units.strip() != "mm" and pr_units.strip() != "kg m-2":
                     raise Exception("L'unità di misura non è mm, esco")
+
+                # Gestisco il tempo di cumulazione
+                acc_t = varid_pr.accum_time_h
+                orig_acc_t = acc_t
                 if acc_t == 0:
                     print("Accumulation time (acc_t) not defined! Default = 1.0 hour")
                     acc_t = 1.0
+                elif acc_t > 0 and acc_t < 1.0:
+                    # Sono cumulate su minuti: calcolo il tempo di cumulazione in minuti
+                    acc_t = acc_t * 60
+                    
+                # Matrice precipitazione cumulata
+                cum_pr_mm = [varid_pr[:]][0]
                 # Sostituisco il valore mancante con rmiss
                 cum_pr_mm = np.array(cum_pr_mm)
                 cum_pr_mm = np.where(cum_pr_mm >= 0.0, cum_pr_mm, rmiss_grib)
                 cum_pr_mm = cum_pr_mm[0]
 
-            elif k == "geo_dim":
-                varid_geo = ncid.variables["geo_dim"]
+            elif k == "geo_dim" or k == "geo_limits":
+                try: 
+                    varid_geo = ncid.variables["geo_dim"]
+                except:
+                    varid_geo = ncid.variables["geo_limits"]
                 geo_lim = [varid_geo[:]][0]
 
-            elif k == "mesh_dim":
-                varid_mesh = ncid.variables["mesh_dim"]
+            elif k == "mesh_dim" or k == "grid_mesh":
+                try:
+                    varid_mesh = ncid.variables["mesh_dim"]
+                except:
+                    varid_mesh = ncid.variables["grid_mesh"]
                 mesh_xy = [varid_mesh[:]][0]
 
         if mesh_xy is None:
             raise Exception("Manca la variabile mesh_xy.")
 
         # Calcolo data inizio intervallo di cumulazione
-        cum_begin = cum_end - timedelta(hours=int(acc_t))
+        if time[0:7] == "minutes" or (orig_acc_t > 0 and orig_acc_t < 1.0):
+            ind_unit_time = 0
+            cum_begin = cum_end - timedelta(minutes=int(acc_t))
+        else:
+            ind_unit_time = 1
+            cum_begin = cum_end - timedelta(hours=int(acc_t))
 
         """
         ==============================================================================
         SCRITTURA DEL GRIB
         ==============================================================================
         """
-        # Andrà sistemato se si avranno cumulate in minuti
         if fileout is None:
-            if time[0:7] == "minutes":
+            if time[0:7] == "minutes" or (orig_acc_t > 0 and orig_acc_t < 1.0):
                 fileout = "radar_SRT_{}_{}min.grib2".format(
                     cum_end.strftime("%Y%m%d%H%M"), int(acc_t)
                 )
@@ -170,7 +201,7 @@ def radar_netcdf2grib(name_nc, fileout=None):
             "dataDate": int(cum_begin.strftime("%Y%m%d")),
             "dataTime": int(cum_begin.strftime("%H%M")),
             "typeOfTimeIncrement": 1,  # 2
-            "indicatorOfUnitOfTimeRange": 1,  # 1=ore #0=minuti (Indicator of unit of time for time range over which statistical processing is done)
+            "indicatorOfUnitOfTimeRange": ind_unit_time,  # 1=ore #0=minuti (Indicator of unit of time for time range over which statistical processing is done)
             "lengthOfTimeRange": int(
                 acc_t
             ),  # Length of the time range over which statistical processing is done
@@ -197,16 +228,29 @@ def radar_netcdf2grib(name_nc, fileout=None):
 
         codes_set_key_vals(gaid_template, key_map_grib)
 
+        if ncid.Conventions == "CF-1.8":
+            # "Geo limits [xLL, xUR, yLL, yUR]"
+            loFirst = geo_lim[0]
+            loLast = geo_lim[1]
+            laFirst =  geo_lim[3]
+            laLast = geo_lim[2]
+        elif ncid.Conventions == "CF-1.4":
+            # "Geo limits [yLL, xLL, yUR, xUR]"
+            loFirst = geo_lim[1]
+            loLast = geo_lim[3]
+            laFirst = geo_lim[2]
+            laLast = geo_lim[0]
+            
         codes_set_key_vals(
             gaid_template,
             {
                 "typeOfGrid": tipo,
                 "Ni": dim_lon,  # nx
                 "Nj": dim_lat,  # ny
-                "longitudeOfFirstGridPointInDegrees": geo_lim[1],  # xmin (loFirst)
-                "longitudeOfLastGridPointInDegrees": geo_lim[3],  # xmax (loLast)
-                "latitudeOfFirstGridPointInDegrees": geo_lim[2],  # ymin (laFirst)
-                "latitudeOfLastGridPointInDegrees": geo_lim[0],  # ymax (laLast)
+                "longitudeOfFirstGridPointInDegrees": loFirst,
+                "longitudeOfLastGridPointInDegrees": loLast,
+                "latitudeOfFirstGridPointInDegrees": laFirst,  
+                "latitudeOfLastGridPointInDegrees": laLast, 
                 "uvRelativeToGrid": component_flag,  # component_flag
             },
         )
